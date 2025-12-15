@@ -3,7 +3,8 @@
  * Контроллер читает сигнал из дачтиков утечки воды и отключает питание насоса скважины
  * уходя в аварийный режим, который требует сброса контроллера нажажием кнопки. 
  * Контроллер управляет индикацией на светодиодах и изадёт тревожный сигнал с помощью зумера.
- *
+ * Fuses : .\avrdude.exe -p t2313 -c usbasp -U lfuse:w:0xe2:m -U hfuse:w:0xdb:m -U efuse:w:0xff:m
+ * Firmware: .\avrdude.exe -p t2313 -c usbasp -U flash:w:WPPController.hex
  * Created: 09.12.2025 21:53:09
  * Author : Sergei Biletnikov
  */ 
@@ -22,9 +23,9 @@
 // порт и выходы управлениям светодиодами
 #define LED_DDR DDRB
 #define LED_PORT PORTB
-#define WLS_ALARM_LED_1_PIN PINB0
-#define WLS_ALARM_LED_2_PIN PINB1
-#define STATUS_LED_PIN PINB3
+#define WLS_ALARM_LED_1_PIN PINB1
+#define WLS_ALARM_LED_2_PIN PINB2
+#define STATUS_LED_PIN PINB0
 // индикация для двух сенсоров
 #define WLS_ALARM_LED_1_ON (LED_PORT|=(1<<WLS_ALARM_LED_1_PIN))
 #define WLS_ALARM_LED_2_ON (LED_PORT|=(1<<WLS_ALARM_LED_2_PIN))
@@ -35,9 +36,9 @@
 static uint8_t status_led_counter;
 
 // порт и выводы управления зумером (пищалкой)
-#define BUZZER_DDR DDRD
-#define BUZZER_PORT PORTD
-#define BUZZER_PIN PIND6
+#define BUZZER_DDR DDRB
+#define BUZZER_PORT PORTB
+#define BUZZER_PIN PINB7
 #define BUZZER_BEEP_ON (BUZZER_PORT|=(1<<BUZZER_PIN))
 #define BUZZER_BEEP_OFF (BUZZER_PORT&=~(1<<BUZZER_PIN))
 #define BUZZER_TOGGLE (BUZZER_PORT^=(1<<BUZZER_PIN))
@@ -45,9 +46,9 @@ static uint8_t status_led_counter;
 static uint8_t buzzer_beep_counter;
 
 // порт и вывод управления реле скважиной (высокий уровень приводит к включению симмистра, который разрывает контакты переходного реле и отключает скважину)
-#define PUMP_RELAY_DDR DDRB
-#define PUMP_RELAY_PORT PORTB
-#define PUMP_RELAY_PIN PINB3
+#define PUMP_RELAY_DDR DDRD
+#define PUMP_RELAY_PORT PORTD
+#define PUMP_RELAY_PIN PIND6
 #define PUMP_RELAY_OFF (PUMP_RELAY_PORT|=(1<<PUMP_RELAY_PIN))
 #define PUMP_RELAY_ON (PUMP_RELAY_PORT&=~(1<<PUMP_RELAY_PIN))
 
@@ -64,6 +65,7 @@ static uint8_t wls_alarm_counter_2;
 // проверка сигнала с сенсоров
 #define CHECK_ALARM_PIN_WLS_1 (WLS_INPUT_PORT & (1<<WLS_INPUT_1_PIN))
 #define CHECK_ALARM_PIN_WLS_2 (WLS_INPUT_PORT & (1<<WLS_INPUT_2_PIN))
+
 
 
 // возвращает не ноль, если первый сенсор в режиме аварии
@@ -142,11 +144,11 @@ void blink_status_led()
 
 void init()
 {
-	wdt_disable();
-	wdt_enable(WDTO_2S); // инициализация сторожевого таймера
-	
 	cli(); // отключем прерывания
 	
+	wdt_disable();
+	wdt_enable(WDTO_1S); // инициализация сторожевого таймера на 2 секунды
+		
 	// устанавливаем выводы управления светодиодами как выход
 	LED_DDR|= (1<<WLS_ALARM_LED_1_PIN);
 	LED_DDR|= (1<<WLS_ALARM_LED_2_PIN);
@@ -173,15 +175,13 @@ void init()
 	status_led_counter = 0;
 	
 	// сигнал запуска (сброса)	
-	BUZZER_BEEP_ON;
-	_delay_ms(200);
-	BUZZER_BEEP_OFF;
-	_delay_ms(200);
-	BUZZER_BEEP_ON;
-	_delay_ms(200);
-	BUZZER_BEEP_OFF;
-	
-	//sei();
+	for (uint8_t i=0; i < 3; i++)
+	{
+		BUZZER_BEEP_ON;
+		_delay_ms(100);
+		BUZZER_BEEP_OFF;
+		_delay_ms(100);
+	}
 }
 
 int main(void)
@@ -207,8 +207,7 @@ int main(void)
 		// мигание статусным светодиодом раз в секунду
 		blink_status_led();
 		
-		_delay_ms(100); // задержка 100 мс перед новой итерацией
-		
+		_delay_ms(100); // задержка 100 мс перед новой итерацией		
     }
 }
 
